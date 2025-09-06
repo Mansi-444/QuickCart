@@ -1,7 +1,10 @@
 'use client'
+import { useUser, useAuth } from "@clerk/nextjs"
 import { productsDummyData, userDummyData } from "@/assets/assets";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
+import axios from "axios";
+import toast from "react-hot-toast";
 
 export const AppContext = createContext();
 
@@ -14,6 +17,10 @@ export const AppContextProvider = (props) => {
     const currency = process.env.NEXT_PUBLIC_CURRENCY
     const router = useRouter()
 
+
+    const { user } = useUser()
+    const {getToken} = useAuth()
+
     const [products, setProducts] = useState([])
     const [userData, setUserData] = useState(false)
     const [isSeller, setIsSeller] = useState(true)
@@ -24,8 +31,28 @@ export const AppContextProvider = (props) => {
     }
 
     const fetchUserData = async () => {
+      try {
+
+      if (user.publicMetadata.role === 'seller'){
+        setIsSeller(true)
+      }
+
+      const token = await getToken()
+
+      const{data} = await axios.get('/api/user/data',{ headers: {Authorization: `Bearer ${token}`}})
+       
+      if(data.success){
+        setUserData(data.user)
+        setCartItems(data.user.cartItems)
+      }else{
+        toast.error(data.message)
+      }
+
         setUserData(userDummyData)
-    }
+    }catch (error){
+    toast.error(error.message)
+}
+}
 
     const addToCart = async (itemId) => {
 
@@ -37,8 +64,10 @@ export const AppContextProvider = (props) => {
             cartData[itemId] = 1;
         }
         setCartItems(cartData);
-
+        toast.success('Item added to cart')
     }
+        
+    
 
     const updateCartQuantity = async (itemId, quantity) => {
 
@@ -49,8 +78,20 @@ export const AppContextProvider = (props) => {
             cartData[itemId] = quantity;
         }
         setCartItems(cartData)
+        if (user) {
+            try{
+                const token = await getToken()
 
+                await axios.post('/api/cart/update', {cartData}, {headers:{Authorization: `Bearer  ${token} `}} ) 
+                 toast.success('Cart Updated')
+
+            } catch (error) {
+                toast.error(error.message)
+            }
+        }
     }
+
+    
 
     const getCartCount = () => {
         let totalCount = 0;
@@ -82,6 +123,7 @@ export const AppContextProvider = (props) => {
     }, [])
 
     const value = {
+        user, getToken,
         currency, router,
         isSeller, setIsSeller,
         userData, fetchUserData,
